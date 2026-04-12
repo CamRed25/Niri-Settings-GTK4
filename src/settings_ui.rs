@@ -248,7 +248,7 @@ impl SettingsWindow {
         stack.add_named(&build_switch_events_page(Rc::clone(&cfg)), Some("switch-events"));
         stack.add_named(&build_outputs_page(Rc::clone(&cfg)), Some("outputs"));
         stack.add_named(
-            &build_stub_page("software", "Software tools panel — coming soon"),
+            &build_stub_page("software", "coming soon"),
             Some("software"),
         );
         stack.set_visible_child_name("behaviour");
