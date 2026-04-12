@@ -1,0 +1,11 @@
+/run/media/cam/games1tb/Projects/DE/niri-settings/target/debug/deps/env_logger-603ae18e5e2d8a9f.d: /home/cam/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/env_logger-0.11.10/src/lib.rs /home/cam/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/env_logger-0.11.10/src/logger.rs /home/cam/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/env_logger-0.11.10/src/writer/mod.rs /home/cam/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/env_logger-0.11.10/src/writer/buffer.rs /home/cam/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/env_logger-0.11.10/src/writer/target.rs /home/cam/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/env_logger-0.11.10/src/fmt/mod.rs /home/cam/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/env_logger-0.11.10/src/fmt/humantime.rs
+
+/run/media/cam/games1tb/Projects/DE/niri-settings/target/debug/deps/libenv_logger-603ae18e5e2d8a9f.rmeta: /home/cam/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/env_logger-0.11.10/src/lib.rs /home/cam/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/env_logger-0.11.10/src/logger.rs /home/cam/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/env_logger-0.11.10/src/writer/mod.rs /home/cam/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/env_logger-0.11.10/src/writer/buffer.rs /home/cam/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/env_logger-0.11.10/src/writer/target.rs /home/cam/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/env_logger-0.11.10/src/fmt/mod.rs /home/cam/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/env_logger-0.11.10/src/fmt/humantime.rs
+
+/home/cam/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/env_logger-0.11.10/src/lib.rs:
+/home/cam/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/env_logger-0.11.10/src/logger.rs:
+/home/cam/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/env_logger-0.11.10/src/writer/mod.rs:
+/home/cam/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/env_logger-0.11.10/src/writer/buffer.rs:
+/home/cam/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/env_logger-0.11.10/src/writer/target.rs:
+/home/cam/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/env_logger-0.11.10/src/fmt/mod.rs:
+/home/cam/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/env_logger-0.11.10/src/fmt/humantime.rs:
