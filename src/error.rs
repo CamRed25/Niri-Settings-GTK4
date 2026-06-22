@@ -8,6 +8,8 @@ pub enum ShellError {
     GtkInit,
     #[error("ipc error: {0}")]
     Ipc(#[from] IpcError),
+    #[error("settings error: {0}")]
+    Settings(#[from] crate::settings_backend::SettingsError),
 }
 
 #[derive(Debug, Error)]
