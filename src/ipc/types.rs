@@ -2,6 +2,8 @@
 
 #![allow(dead_code)]
 
+use std::collections::HashMap;
+
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Deserialize)]
@@ -44,6 +46,11 @@ pub enum NiriRequest {
 
 #[derive(Debug, Deserialize)]
 pub enum NiriReply {
-    Ok(serde_json::Value),
+    Ok(NiriResponse),
     Err(String),
+}
+
+#[derive(Debug, Deserialize)]
+pub enum NiriResponse {
+    Outputs(HashMap<String, NiriOutput>),
 }

@@ -1,7 +1,12 @@
 [package]
 name = "niri-settings"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
+description = "A GTK4 configuration editor for the Niri Wayland compositor"
+repository = "https://github.com/CamRed25/Niri-Settings-GTK4"
+keywords = ["niri", "wayland", "gtk4", "configuration"]
+categories = ["gui", "config"]
+publish = false
 
 [[bin]]
 name = "niri-settings"

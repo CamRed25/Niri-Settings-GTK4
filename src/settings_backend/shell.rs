@@ -124,10 +124,10 @@ pub fn parse(text: &str) -> Result<ShellConfig, SettingsError> {
         if let Some(value) = number_arg(theme, "panel-opacity") {
             cfg.theme.panel_opacity = value.clamp(0.4, 1.0);
         }
-        if let Some(value) = string_arg(theme, "font-ui") {
+        if let Some(value) = string_arg(theme, "font-ui").filter(|value| valid_font(value)) {
             cfg.theme.font_ui = value.to_owned();
         }
-        if let Some(value) = string_arg(theme, "font-mono") {
+        if let Some(value) = string_arg(theme, "font-mono").filter(|value| valid_font(value)) {
             cfg.theme.font_mono = value.to_owned();
         }
     }
@@ -174,7 +174,11 @@ pub fn save(cfg: &ShellConfig) -> Result<(), SettingsError> {
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)?;
     }
-    let tmp = path.with_extension("kdl.tmp");
+    let file_name = path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("shell.kdl");
+    let tmp = path.with_file_name(format!(".{file_name}.tmp.{}", std::process::id()));
     std::fs::write(&tmp, render(cfg))?;
     std::fs::rename(tmp, path)?;
     Ok(())
@@ -217,6 +221,14 @@ pub fn valid_color(value: &str) -> bool {
     value.starts_with('#')
         && matches!(value.len(), 4 | 5 | 7 | 9)
         && value[1..].chars().all(|c| c.is_ascii_hexdigit())
+}
+
+fn valid_font(value: &str) -> bool {
+    !value.is_empty()
+        && value.len() <= 100
+        && value
+            .chars()
+            .all(|c| c.is_alphanumeric() || matches!(c, ' ' | '-' | '_' | ','))
 }
 
 fn string_arg<'a>(doc: &'a KdlDocument, name: &str) -> Option<&'a str> {

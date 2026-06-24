@@ -3,12 +3,12 @@
 // Sidebar navigation + stack of pages.
 // Launched via `niri-shell --settings`.
 
-mod extra_pages;
-mod helpers;
-mod input_pages;
-mod outputs_page;
-mod rules_pages;
-mod shell_pages;
+mod extra_pages_ui;
+mod helpers_ui;
+mod input_pages_ui;
+mod outputs_page_ui;
+mod rules_pages_ui;
+mod shell_pages_ui;
 
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -20,17 +20,17 @@ use gtk4::{
     STYLE_PROVIDER_PRIORITY_APPLICATION,
 };
 
-use extra_pages::{
+use extra_pages_ui::{
     build_animations_page, build_debug_page, build_gestures_page, build_miscellaneous_page,
     build_recent_windows_page, build_workspaces_page,
 };
-use input_pages::{build_behaviour_page, build_input_page, build_layout_page};
-use outputs_page::build_outputs_page;
-use rules_pages::{
+use input_pages_ui::{build_behaviour_page, build_input_page, build_layout_page};
+use outputs_page_ui::build_outputs_page;
+use rules_pages_ui::{
     build_keybindings_page, build_layer_rules_page, build_switch_events_page,
     build_window_rules_page,
 };
-use shell_pages::{build_shell_behaviour_page, build_software_page, build_theme_page};
+use shell_pages_ui::{build_shell_behaviour_page, build_software_page, build_theme_page};
 
 // ── Public entry point ────────────────────────────────────────────────────────
 
@@ -99,7 +99,7 @@ impl SettingsWindow {
         window.add_css_class("settings-window");
 
         let provider = CssProvider::new();
-        provider.load_from_string(include_str!("../settings.css"));
+        provider.load_from_string(include_str!("settings.css"));
         gtk4::style_context_add_provider_for_display(
             &gtk4::prelude::WidgetExt::display(&window),
             &provider,
@@ -351,7 +351,7 @@ fn build_sidebar() -> Sidebar {
     spacer.set_vexpand(true);
     container.append(&spacer);
 
-    let ver = Label::new(Some("niri-shell v0.1.0"));
+    let ver = Label::new(Some(concat!("niri-settings v", env!("CARGO_PKG_VERSION"))));
     ver.add_css_class("ver-label");
     ver.set_xalign(0.0);
     container.append(&ver);

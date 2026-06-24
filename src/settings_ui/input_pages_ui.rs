@@ -6,7 +6,7 @@ use std::rc::Rc;
 use gtk4::prelude::*;
 use gtk4::{Box as GtkBox, DropDown, Entry, Label, Orientation, Scale, Separator};
 
-use super::helpers::*;
+use super::helpers_ui::*;
 use crate::settings_backend::{
     AccelProfile, CenterFocusedColumn, ClickMethod, DragSetting, MouseScrollMethod, SettingsConfig,
     TapButtonMap, TouchpadScrollMethod, TrackLayout,

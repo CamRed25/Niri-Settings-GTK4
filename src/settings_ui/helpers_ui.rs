@@ -1,4 +1,4 @@
-// settings_ui/helpers.rs — Shared GTK4 widget builders for settings pages.
+// settings_ui/helpers_ui.rs — Shared GTK4 widget builders for settings pages.
 
 use std::cell::RefCell;
 use std::rc::Rc;

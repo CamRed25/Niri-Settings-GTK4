@@ -1,15 +1,14 @@
 //! Theme, shell behaviour and optional-software pages.
 
 use std::cell::RefCell;
-use std::os::unix::fs::PermissionsExt;
-use std::path::Path;
 use std::rc::Rc;
 
 use gtk4::prelude::*;
 use gtk4::{Align, Box as GtkBox, CssProvider, Entry, Label, Orientation, Separator};
 
-use super::helpers::*;
+use super::helpers_ui::*;
 use crate::settings_backend::shell::{valid_color, ShellConfig};
+use crate::settings_backend::tools::program_exists;
 
 pub fn build_theme_page(shell: Rc<RefCell<ShellConfig>>) -> GtkBox {
     let page = page_box();
@@ -265,34 +264,4 @@ fn update_preview(preview: &GtkBox, provider: &CssProvider, config: &ShellConfig
         config.theme.text,
     ));
     preview.queue_draw();
-}
-
-fn program_exists(name: &str) -> bool {
-    if name.contains('/') {
-        return executable(Path::new(name));
-    }
-    std::env::split_paths(&std::env::var_os("PATH").unwrap_or_default())
-        .map(|directory| directory.join(name))
-        .any(|path| executable(&path))
-}
-
-fn executable(path: &Path) -> bool {
-    path.metadata()
-        .map(|metadata| metadata.is_file() && metadata.permissions().mode() & 0o111 != 0)
-        .unwrap_or(false)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn shell_is_discovered_from_path() {
-        assert!(program_exists("sh"));
-    }
-
-    #[test]
-    fn nonsense_tool_is_missing() {
-        assert!(!program_exists("niri-shell-definitely-not-a-program"));
-    }
 }

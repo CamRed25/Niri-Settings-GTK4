@@ -1,12 +1,17 @@
 // settings_backend/mod.rs — Pure Rust config model for the niri settings GUI.
 //
-// Persists to ~/.config/niri-shell/settings.json (serde state).
-// On every save, generates ~/.config/niri-shell/settings.kdl (KDL include)
-// and ensures that file is included from ~/.config/niri/config.kdl.
+// settings.json is this app's authoritative store: it is loaded and written
+// back in full. settings.kdl is the fragment niri consumes; it is generated on
+// save and validated, but on load only the externally-editable nodes (binds,
+// output, window-rule, layer-rule) are parsed back from it and allowed to
+// override the JSON copy (so hand edits to those are picked up). Every other
+// managed section round-trips through settings.json by design — see
+// `overlay_primary_kdl` and `MANAGED_TOP_LEVEL`.
 
 pub mod kdl;
 pub mod keybinds;
 pub mod shell;
+pub mod tools;
 pub mod types;
 
 // Re-export everything the rest of the crate uses.
@@ -107,6 +112,12 @@ pub fn load() -> Result<SettingsConfig, SettingsError> {
     Ok(cfg)
 }
 
+/// Overlays the externally-editable nodes from a parsed settings.kdl onto a
+/// config already loaded from JSON. Only `binds`, `output`, `window-rule`, and
+/// `layer-rule` are parsed back (they may be hand-edited with provenance); all
+/// other [`MANAGED_TOP_LEVEL`] sections are JSON-authoritative and intentionally
+/// not read here. Keep the set parsed here in sync with their writers in
+/// `kdl.rs` so no field is silently dropped on reload.
 fn overlay_primary_kdl(cfg: &mut SettingsConfig, doc: &::kdl::KdlDocument) {
     if let Some(children) = doc.get("binds").and_then(|node| node.children()) {
         cfg.binds = children
@@ -118,6 +129,7 @@ fn overlay_primary_kdl(cfg: &mut SettingsConfig, doc: &::kdl::KdlDocument) {
 
     let mut outputs = Vec::new();
     let mut rules = Vec::new();
+    let mut layer_rules = Vec::new();
     for node in doc.nodes() {
         match node.name().value() {
             "output" => {
@@ -163,10 +175,18 @@ fn overlay_primary_kdl(cfg: &mut SettingsConfig, doc: &::kdl::KdlDocument) {
                     continue;
                 };
                 let mut rule = WindowRule::default();
-                if let Some(matcher) = children.get("match") {
-                    rule.match_app_id = property_string(matcher, "app-id").unwrap_or_default();
-                    rule.match_title = property_string(matcher, "title").unwrap_or_default();
-                    rule.match_at_startup = tri_property(matcher, "at-startup");
+                // The writer emits app-id, title, and at-startup as separate
+                // `match` lines, so merge properties across every match node.
+                for matcher in match_nodes(children) {
+                    if let Some(app_id) = property_string(matcher, "app-id") {
+                        rule.match_app_id = app_id;
+                    }
+                    if let Some(title) = property_string(matcher, "title") {
+                        rule.match_title = title;
+                    }
+                    if matcher.get("at-startup").is_some() {
+                        rule.match_at_startup = tri_property(matcher, "at-startup");
+                    }
                 }
                 rule.open_maximized = tri_child(children, "open-maximized");
                 rule.open_fullscreen = tri_child(children, "open-fullscreen");
@@ -179,8 +199,14 @@ fn overlay_primary_kdl(cfg: &mut SettingsConfig, doc: &::kdl::KdlDocument) {
                     .unwrap_or_default()
                     .to_owned();
                 rule.opacity = child_number(children, "opacity").unwrap_or(0.0);
+                rule.block_out_from =
+                    parse_block_out_from(child_string(children, "block-out-from"));
+                rule.draw_border_with_background =
+                    tri_child(children, "draw-border-with-background");
                 rule.geometry_corner_radius =
                     child_number(children, "geometry-corner-radius").unwrap_or(0.0);
+                rule.clip_to_geometry = tri_child(children, "clip-to-geometry");
+                rule.variable_refresh_rate = tri_child(children, "variable-refresh-rate");
                 rule.min_width = child_i64(children, "min-width").unwrap_or(0).max(0) as u32;
                 rule.max_width = child_i64(children, "max-width").unwrap_or(0).max(0) as u32;
                 rule.min_height = child_i64(children, "min-height").unwrap_or(0).max(0) as u32;
@@ -188,11 +214,34 @@ fn overlay_primary_kdl(cfg: &mut SettingsConfig, doc: &::kdl::KdlDocument) {
                 rule.scroll_factor = child_number(children, "scroll-factor").unwrap_or(0.0);
                 rules.push(rule);
             }
+            "layer-rule" => {
+                let Some(children) = node.children() else {
+                    continue;
+                };
+                let mut rule = LayerRule::default();
+                for matcher in match_nodes(children) {
+                    if let Some(namespace) = property_string(matcher, "namespace") {
+                        rule.match_namespace = namespace;
+                    }
+                    if matcher.get("at-startup").is_some() {
+                        rule.match_at_startup = tri_property(matcher, "at-startup");
+                    }
+                }
+                rule.opacity = child_number(children, "opacity").unwrap_or(0.0);
+                rule.block_out_from =
+                    parse_block_out_from(child_string(children, "block-out-from"));
+                rule.shadow = parse_shadow(children);
+                rule.geometry_corner_radius =
+                    child_number(children, "geometry-corner-radius").unwrap_or(0.0);
+                rule.place_within_backdrop = tri_child(children, "place-within-backdrop");
+                layer_rules.push(rule);
+            }
             _ => {}
         }
     }
     cfg.outputs = outputs;
     cfg.window_rules = rules;
+    cfg.layer_rules = layer_rules;
 }
 
 fn child_value<'a>(doc: &'a ::kdl::KdlDocument, name: &str) -> Option<&'a ::kdl::KdlValue> {
@@ -243,6 +292,37 @@ fn tri_child(doc: &::kdl::KdlDocument, name: &str) -> TriState {
     }
 }
 
+/// Every `match` node inside a window/layer-rule block. The writer splits
+/// matchers across separate lines, so callers must merge them.
+fn match_nodes(doc: &::kdl::KdlDocument) -> impl Iterator<Item = &::kdl::KdlNode> {
+    doc.nodes()
+        .iter()
+        .filter(|node| node.name().value() == "match")
+}
+
+/// Inverse of [`BlockOutFrom::as_kdl_str`].
+fn parse_block_out_from(value: Option<&str>) -> BlockOutFrom {
+    match value {
+        Some("screencast") => BlockOutFrom::Screencast,
+        Some("screen-capture") => BlockOutFrom::ScreenCapture,
+        _ => BlockOutFrom::None,
+    }
+}
+
+/// Reads a layer-rule `shadow { on|off }` block back into a tri-state.
+fn parse_shadow(doc: &::kdl::KdlDocument) -> TriState {
+    let Some(inner) = doc.get("shadow").and_then(::kdl::KdlNode::children) else {
+        return TriState::Default;
+    };
+    if inner.get("on").is_some() {
+        TriState::On
+    } else if inner.get("off").is_some() {
+        TriState::Off
+    } else {
+        TriState::Default
+    }
+}
+
 fn parse_mode(mode: &str, output: &mut OutputConfig) {
     let (resolution, refresh) = mode.split_once('@').unwrap_or((mode, ""));
     let Some((width, height)) = resolution.split_once('x') else {
@@ -270,7 +350,7 @@ pub enum SaveStatus {
 
 /// Atomically persists and validates the app-owned KDL include.
 ///
-/// JSON is retained as a migration/cache format for older builds. The KDL
+/// settings.json is the authoritative store and is rewritten in full. The KDL
 /// fragment is the file consumed by niri and is always validated before it is
 /// replaced. Unknown top-level nodes in the managed fragment are preserved.
 ///
@@ -281,13 +361,15 @@ pub fn save(cfg: &SettingsConfig) -> Result<SaveStatus, SettingsError> {
 
     let kdl_content = merge_with_existing_kdl(&generate_kdl(cfg))?;
     let final_kdl_path = kdl_path()?;
-    let tmp_kdl_path = final_kdl_path.with_extension("kdl.candidate");
+    let tmp_kdl_path = temporary_sibling(&final_kdl_path, "candidate");
     std::fs::write(&tmp_kdl_path, &kdl_content)?;
 
     let status = match validate_candidate(&tmp_kdl_path) {
         Ok(status) => status,
         Err(error) => {
-            let _ = std::fs::remove_file(&tmp_kdl_path);
+            if let Err(cleanup_error) = std::fs::remove_file(&tmp_kdl_path) {
+                log::warn!("could not remove rejected candidate: {cleanup_error}");
+            }
             return Err(error);
         }
     };
@@ -295,16 +377,20 @@ pub fn save(cfg: &SettingsConfig) -> Result<SaveStatus, SettingsError> {
     std::fs::rename(&tmp_kdl_path, &final_kdl_path)?;
     ensure_include()?;
 
-    // Compatibility cache for pre-KDL versions. Write atomically as well.
+    // Authoritative store: rewrite in full, atomically.
     let json = serde_json::to_string_pretty(cfg)?;
     let json_final = json_path()?;
-    let json_tmp = json_final.with_extension("json.tmp");
+    let json_tmp = temporary_sibling(&json_final, "tmp");
     std::fs::write(&json_tmp, json)?;
     std::fs::rename(json_tmp, json_final)?;
 
     Ok(status)
 }
 
+/// Top-level nodes this app owns and replaces wholesale when writing
+/// settings.kdl; any other node in the file is preserved untouched. Of these,
+/// only `output`, `window-rule`, `layer-rule`, and `binds` are parsed back on
+/// load (see `overlay_primary_kdl`); the rest are JSON-authoritative.
 const MANAGED_TOP_LEVEL: &[&str] = &[
     "input",
     "layout",
@@ -382,13 +468,18 @@ fn validate_candidate(candidate: &std::path::Path) -> Result<SaveStatus, Setting
         candidate.to_string_lossy().replace('"', "\\\"")
     ));
 
-    let validation_path = config_dir.join(".niri-settings-validation.kdl");
+    let validation_path = config_dir.join(format!(
+        ".niri-settings-validation-{}.kdl",
+        std::process::id()
+    ));
     std::fs::write(&validation_path, validation_root)?;
     let output = Command::new("niri")
         .args(["validate", "--config"])
         .arg(&validation_path)
         .output();
-    let _ = std::fs::remove_file(&validation_path);
+    if let Err(error) = std::fs::remove_file(&validation_path) {
+        log::warn!("could not remove validation file: {error}");
+    }
 
     match output {
         Ok(output) if output.status.success() => Ok(SaveStatus::Validated),
@@ -442,11 +533,19 @@ fn ensure_include() -> Result<(), SettingsError> {
             std::fs::copy(&config_path, backup)?;
         }
     }
-    let tmp = config_path.with_extension("kdl.tmp");
+    let tmp = temporary_sibling(&config_path, "tmp");
     std::fs::write(&tmp, new_content)?;
     std::fs::rename(tmp, &config_path)?;
     log::info!("settings: added include line to niri config");
     Ok(())
+}
+
+fn temporary_sibling(path: &std::path::Path, purpose: &str) -> PathBuf {
+    let file_name = path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("niri-settings");
+    path.with_file_name(format!(".{file_name}.{purpose}.{}", std::process::id()))
 }
 
 // ── Unit tests ────────────────────────────────────────────────────────────────
@@ -808,6 +907,105 @@ mod tests {
         cfg.layer_rules.push(r);
         let kdl = generate_kdl(&cfg);
         assert!(kdl.contains(r#"block-out-from "screen-capture""#));
+    }
+
+    #[test]
+    fn window_rule_full_roundtrip() {
+        let mut source = SettingsConfig::default();
+        source.window_rules.push(WindowRule {
+            match_app_id: "^firefox$".into(),
+            match_title: "^Library$".into(),
+            match_at_startup: TriState::On,
+            open_maximized: TriState::On,
+            open_fullscreen: TriState::Off,
+            open_floating: TriState::On,
+            open_focused: TriState::Off,
+            open_on_output: "DP-1".into(),
+            open_on_workspace: "3".into(),
+            opacity: 0.85,
+            block_out_from: BlockOutFrom::ScreenCapture,
+            draw_border_with_background: TriState::On,
+            geometry_corner_radius: 8.0,
+            clip_to_geometry: TriState::Off,
+            variable_refresh_rate: TriState::On,
+            min_width: 100,
+            max_width: 1920,
+            min_height: 200,
+            max_height: 1080,
+            scroll_factor: 1.5,
+            ..WindowRule::default()
+        });
+        let document: ::kdl::KdlDocument = generate_kdl(&source).parse().unwrap();
+        let mut restored = SettingsConfig::default();
+        overlay_primary_kdl(&mut restored, &document);
+        let r = &restored.window_rules[0];
+        // app-id and title live on separate `match` lines: both must survive.
+        assert_eq!(r.match_app_id, "^firefox$");
+        assert_eq!(r.match_title, "^Library$");
+        assert_eq!(r.match_at_startup, TriState::On);
+        assert_eq!(r.open_maximized, TriState::On);
+        assert_eq!(r.open_fullscreen, TriState::Off);
+        assert_eq!(r.open_floating, TriState::On);
+        assert_eq!(r.open_focused, TriState::Off);
+        assert_eq!(r.open_on_output, "DP-1");
+        assert_eq!(r.open_on_workspace, "3");
+        assert_eq!(r.opacity, 0.85);
+        // Previously dropped on read:
+        assert_eq!(r.block_out_from, BlockOutFrom::ScreenCapture);
+        assert_eq!(r.draw_border_with_background, TriState::On);
+        assert_eq!(r.geometry_corner_radius, 8.0);
+        assert_eq!(r.clip_to_geometry, TriState::Off);
+        assert_eq!(r.variable_refresh_rate, TriState::On);
+        assert_eq!(r.min_width, 100);
+        assert_eq!(r.max_width, 1920);
+        assert_eq!(r.min_height, 200);
+        assert_eq!(r.max_height, 1080);
+        assert_eq!(r.scroll_factor, 1.5);
+    }
+
+    #[test]
+    fn layer_rule_full_roundtrip() {
+        let mut source = SettingsConfig::default();
+        source.layer_rules.push(LayerRule {
+            match_namespace: "^launcher$".into(),
+            match_at_startup: TriState::On,
+            opacity: 0.90,
+            block_out_from: BlockOutFrom::Screencast,
+            shadow: TriState::On,
+            geometry_corner_radius: 12.0,
+            place_within_backdrop: TriState::On,
+            ..LayerRule::default()
+        });
+        let document: ::kdl::KdlDocument = generate_kdl(&source).parse().unwrap();
+        let mut restored = SettingsConfig::default();
+        overlay_primary_kdl(&mut restored, &document);
+        // Layer rules were entirely write-only before this fix.
+        assert_eq!(restored.layer_rules.len(), 1);
+        let r = &restored.layer_rules[0];
+        assert_eq!(r.match_namespace, "^launcher$");
+        assert_eq!(r.match_at_startup, TriState::On);
+        assert_eq!(r.opacity, 0.90);
+        assert_eq!(r.block_out_from, BlockOutFrom::Screencast);
+        assert_eq!(r.shadow, TriState::On);
+        assert_eq!(r.geometry_corner_radius, 12.0);
+        assert_eq!(r.place_within_backdrop, TriState::On);
+    }
+
+    #[test]
+    fn window_rule_parses_combined_match_line() {
+        // niri also accepts one `match` node carrying several properties;
+        // the reader must capture every property even when not split.
+        let document: ::kdl::KdlDocument = r#"
+window-rule {
+    match app-id="firefox" title="Library"
+}
+"#
+        .parse()
+        .unwrap();
+        let mut restored = SettingsConfig::default();
+        overlay_primary_kdl(&mut restored, &document);
+        assert_eq!(restored.window_rules[0].match_app_id, "firefox");
+        assert_eq!(restored.window_rules[0].match_title, "Library");
     }
 
     #[test]

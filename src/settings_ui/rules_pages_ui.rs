@@ -10,7 +10,7 @@ use gtk4::{
     Separator, Switch,
 };
 
-use super::helpers::*;
+use super::helpers_ui::*;
 use crate::settings_backend::{
     action_args_hint, action_needs_args, import_binds_from_niri_config, next_row_id,
     normalize_key_combo, BlockOutFrom, Keybind, LayerRule, SettingsConfig, SwitchEventsSettings,
@@ -330,7 +330,7 @@ pub fn build_keybindings_page(cfg: Rc<RefCell<SettingsConfig>>) -> GtkBox {
                 c.append(&Separator::new(Orientation::Horizontal));
                 let row = row_box();
                 let btn = Button::with_label("delete bind");
-                btn.add_css_class("destructive-action");
+                btn.add_css_class("danger-action");
                 let cfg_c = Rc::clone(cfg);
                 let list_c = Rc::clone(list);
                 btn.connect_clicked(move |_| {
@@ -358,7 +358,7 @@ pub fn build_keybindings_page(cfg: Rc<RefCell<SettingsConfig>>) -> GtkBox {
 
     // add bind button
     let add_btn = Button::with_label("+ add bind");
-    add_btn.add_css_class("suggested-action-custom");
+    add_btn.add_css_class("primary-action");
     add_btn.set_halign(Align::Start);
     let cfg_c = Rc::clone(&cfg);
     let list_c = Rc::clone(&list);
@@ -369,7 +369,7 @@ pub fn build_keybindings_page(cfg: Rc<RefCell<SettingsConfig>>) -> GtkBox {
 
     // import from niri config button
     let import_btn = Button::with_label("import from niri config");
-    import_btn.add_css_class("suggested-action-custom");
+    import_btn.add_css_class("primary-action");
     import_btn.set_halign(Align::Start);
     let cfg_c = Rc::clone(&cfg);
     let list_c = Rc::clone(&list);

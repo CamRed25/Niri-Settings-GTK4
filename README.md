@@ -1,79 +1,64 @@
 # niri-settings
 
-A GTK4 settings GUI for the [niri](https://github.com/YaLTeR/niri) Wayland compositor, written in Rust.
+A GTK4 configuration editor for the [Niri](https://github.com/YaLTeR/niri) Wayland compositor. Changes remain in a draft until Apply validates and atomically writes the app-managed include.
 
-Provides a graphical sidebar interface for editing niri's configuration without touching KDL by hand. Changes are staged and applied atomically after `niri validate` succeeds; Niri watches the managed include and reloads it automatically.
+## Pages
 
-## Features
+The primary navigation contains:
 
-**Settings pages:**
-
-| Page | What you can configure |
+| Page | Purpose |
 |---|---|
-| **Behaviour** | Compositor toggles (focus follows mouse, resize with right-click, etc.) |
-| **Input** | Keyboard (repeat rate/delay, XKB layout, track layout), touchpad (tap, natural scroll, accel, click method, drag), mouse (scroll method, accel, speed), modifier key remapping |
-| **Layout** | Window gaps (inner/outer), border decoration, focus ring style |
-| **Keybindings** | Keyboard recorder, conflict detection, actions/options, and recursive import from the active config and its includes |
-| **Outputs** | Per-monitor mode, scale, rotation, VRR, position, enable/disable |
-| **Switch Events** | Actions for lid-close and tablet-mode switch events |
-| **Window Rules** | Match by app-id/title, control opening geometry, floating, fullscreen, decorations, opacity, size limits |
-| **Layer Rules** | Per-layer-surface screencast/screen-capture visibility |
-| **Animations** | Enable/disable and tune individual window animations |
-| **Workspaces** | Define named workspaces |
-| **Gestures** | Touchpad and touchscreen gesture settings |
-| **Recent Windows** | Recent-focus behaviour |
-| **Debug** | Niri debug options |
-| **Theme** | Tokyo Night token editor and live shell preview |
-| **Behaviour** | Dock, panel, launcher, and notification behaviour |
-| **Software** | Installed/missing status for optional integrations |
-| **Advanced** | Input, layout, animations, workspaces, gestures, recent windows, layer rules, switch events, debug, and miscellaneous compositor settings |
+| Keybindings | GDK key capture, normalized combinations, conflict detection, actions, and recursive import |
+| Window Rules | Compact match/layout table with expanded advanced properties |
+| Outputs | IPC-detected monitor canvas with mode, scale, transform, VRR, and position controls |
+| Theme | Validated Tokyo Night tokens and live shell preview |
+| Behaviour | Dock, workspace, media, network-speed, launcher, and notification preferences |
+| Software | Read-only integration availability and missing-tool guidance |
 
-**On save:**
-- `~/.config/niri-shell/settings.kdl` is the app-managed Niri fragment and canonical source for primary editor pages.
-- `~/.config/niri-shell/shell.kdl` stores shell theme, behaviour, DND, and Night Light preferences.
-- `settings.json` remains only as a compatibility cache and migration source for older builds.
+Advanced contains Input, Layout, Animations, Workspaces, Gestures, Recent Windows, Miscellaneous, Debug, Layer Rules, and Switch Events.
 
-The tool patches your niri config to add an `include` directive the first time it runs — you don't need to edit your config manually.
+## Persistence and safety
 
-### Configuration round-trip & safety
+- `~/.config/niri-shell/settings.json` is the authoritative store: it is loaded and rewritten in full on every Apply.
+- `~/.config/niri-shell/settings.kdl` is the generated fragment niri consumes. On load, only the externally-editable nodes (`binds`, `output`, `window-rule`, `layer-rule`) are parsed back from it and override the JSON copy, so hand edits to those are honoured. The remaining managed sections (input, layout, animations, workspaces, gestures, recent-windows, debug, switch-events, miscellaneous, `prefer-no-csd`) round-trip through `settings.json` by design.
+- `~/.config/niri-shell/shell.kdl` stores theme, behaviour, Do Not Disturb, and Night Light preferences.
+- `NIRI_CONFIG` takes precedence over XDG and HOME defaults for the active compositor config.
+- Apply updates managed nodes, validates a same-directory candidate, creates the first-edit backup, and atomically replaces accepted files.
+- Failed validation leaves the active files untouched and presents the compositor diagnostics.
+- Unknown top-level nodes survive managed rewrites. Comments within editor-owned blocks are regenerated; comments elsewhere remain untouched.
+- External bindings stay visible with provenance. Editing one promotes it into the managed override.
 
-- **Unknown nodes are preserved.** When rewriting `settings.kdl`, any top-level
-  node the editor does not manage is carried over unchanged, so hand-written
-  sections in the managed include survive a save.
-- **Comments inside managed sections are not preserved.** The managed fragment is
-  regenerated from the typed model on each save, so comments placed *within*
-  editor-owned blocks are dropped. Keep comments in your own top-level nodes or
-  in the main `config.kdl`, which the editor never rewrites.
-- **Validation is honest.** A save is only reported as "applied" once
-  `niri validate` accepts it. If the `niri` binary is not on `PATH` (e.g. an
-  offline/dev session) the parser-valid KDL is still written, but the result is
-  reported as *"saved — niri unavailable, not validated"* rather than applied.
-- **Input is validated in place.** Numeric and regex fields flag malformed input
-  with a red border instead of silently coercing to zero, and keybinding
-  conflicts are highlighted on the offending row.
+When the `niri` executable is unavailable, parser-valid KDL can still be saved for offline development, but the UI explicitly reports that compositor validation did not run.
 
-## Requirements
+## Architecture
 
-- GTK 4.12 or later
-- [niri](https://github.com/YaLTeR/niri) compositor (for the generated config to take effect)
-- Rust / Cargo (to build)
+```text
+src/
+├── main.rs                 entry point and renderer setup
+├── settings_backend/       pure Rust models, KDL parsing, validation, and persistence
+├── settings_ui.rs          GTK application and navigation shell
+├── settings_ui/*_ui.rs     GTK page implementations and widget helpers
+├── ipc/                    typed Niri output queries
+└── error.rs                application error types
+```
 
-## Build
+Configuration parsing, recursive include traversal, conflict detection, IPC queries, validation, and disk writes remain outside the GTK page modules.
+
+## Build and usage
+
+The editor requires GTK4 and Niri for live output detection and compositor validation.
 
 ```sh
 cargo build --release
-```
+cargo test --all-targets
+cargo clippy --all-targets --all-features -- -D warnings
+cargo fmt --all -- --check
 
-The binary ends up at `target/release/niri-settings`.
-
-## Usage
-
-```sh
 niri-settings
 niri-settings --page outputs
 ```
 
-Or add it as a keybind in your niri config:
+Example Niri binding:
 
 ```kdl
 binds {
@@ -81,17 +66,4 @@ binds {
 }
 ```
 
-Set `RUST_LOG=debug` for verbose logging.
-
-## Architecture
-
-```
-src/
-├── main.rs              — entry point and renderer setup
-├── settings_backend/    — pure-Rust models, KDL editing and persistence
-├── settings_ui/         — GTK4 sidebar, primary pages and advanced pages
-├── ipc/                 — Niri IPC output detection
-└── error.rs             — typed application errors
-```
-
-The backend and UI modules are intentionally decoupled: configuration and validation remain testable without GTK.
+Set `RUST_LOG=debug` for diagnostic logging.

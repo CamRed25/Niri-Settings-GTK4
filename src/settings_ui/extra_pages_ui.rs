@@ -7,7 +7,7 @@ use std::rc::Rc;
 use gtk4::prelude::*;
 use gtk4::{Align, Box as GtkBox, Button, Entry, Label, Orientation, Scale, Separator};
 
-use super::helpers::*;
+use super::helpers_ui::*;
 use crate::settings_backend::{NamedWorkspace, SettingsConfig};
 
 // ── Animations page ───────────────────────────────────────────────────────────

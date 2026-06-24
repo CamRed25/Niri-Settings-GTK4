@@ -1,4 +1,4 @@
-// settings_ui/outputs_page.rs — Per-display output configuration page.
+// settings_ui/outputs_page_ui.rs — Per-display output configuration page.
 
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -6,7 +6,7 @@ use std::rc::Rc;
 use gtk4::prelude::*;
 use gtk4::{Box as GtkBox, DropDown, Entry, Label, Orientation, Scale, Separator};
 
-use super::helpers::*;
+use super::helpers_ui::*;
 use crate::settings_backend::{OutputConfig, OutputTransform, SettingsConfig, VrrMode};
 
 /// Runs a blocking closure on a background thread and returns the result
@@ -18,7 +18,9 @@ where
 {
     let (tx, rx) = futures::channel::oneshot::channel();
     std::thread::spawn(move || {
-        let _ = tx.send(f());
+        if tx.send(f()).is_err() {
+            log::debug!("output query was cancelled");
+        }
     });
     rx.await
         .map_err(|_| "gio_run_blocking: sender dropped".to_string())
